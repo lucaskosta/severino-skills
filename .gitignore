@@ -1,0 +1,17 @@
+# dado pessoal NUNCA entra neste repo (produto genérico)
+*.db
+*.db.bak-*
+data/
+instances/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# os / editor
+.DS_Store
+.vscode/
+*.swp
