@@ -11,6 +11,13 @@ __pycache__/
 venv/
 .env
 
+# scripts de geração legacy (schema v1, não compatíveis com v2)
+engine/generate_*.py
+
+# documentos de trabalho locais (design / brainstorm)
+refatoracao das skills.md
+modelagem/
+
 # os / editor
 .DS_Store
 .vscode/
