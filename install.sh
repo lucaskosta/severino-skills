@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Severino — instalador de skills
+# Severino — instalador
 # Uso: bash install.sh
 
 set -e
@@ -39,10 +39,43 @@ if [ "$missing" -eq 1 ]; then
   exit 1
 fi
 
-# 3. Criar diretório de skills se necessário
+# 3. Verificar Python 3.10+
+PYTHON=""
+for py in python3.13 python3.12 python3.11 python3.10 python3; do
+  if command -v "$py" &>/dev/null; then
+    ver=$("$py" -c "import sys; print(sys.version_info >= (3,10))" 2>/dev/null)
+    if [ "$ver" = "True" ]; then
+      PYTHON="$py"
+      break
+    fi
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  echo "❌  Python 3.10+ não encontrado."
+  echo "    Instale via: brew install python@3.13"
+  exit 1
+fi
+echo "✓  Python: $($PYTHON --version)"
+
+# 4. Criar virtualenv e instalar dependências do MCP server
+VENV_DIR="$REPO_DIR/venv"
+if [ ! -d "$VENV_DIR" ]; then
+  echo ""
+  echo "Criando virtualenv em $VENV_DIR..."
+  "$PYTHON" -m venv "$VENV_DIR"
+fi
+
+echo "Instalando dependências Python (mcp)..."
+"$VENV_DIR/bin/pip" install --quiet --upgrade pip
+"$VENV_DIR/bin/pip" install --quiet -r "$REPO_DIR/requirements.txt"
+echo "✓  Dependências instaladas"
+
+# 5. Criar diretório de skills se necessário
 mkdir -p "$SKILLS_DIR"
 
-# 4. Criar symlinks para cada skill
+# 6. Criar symlinks para cada skill
+echo ""
 for skill in severino-pergunta severino-anota severino-pente-fino severino-conselheiro; do
   target="$SKILLS_DIR/$skill"
   source="$REPO_DIR/skills/$skill"
@@ -59,7 +92,7 @@ for skill in severino-pergunta severino-anota severino-pente-fino severino-conse
   echo "✓  $skill"
 done
 
-# 5. Criar banco de dados se não existir
+# 7. Criar banco de dados se não existir
 DB_DIR="$SEVERINO_DATA_DIR/finance-mcp-server/data"
 DB_PATH="$DB_DIR/finance.db"
 
@@ -72,15 +105,38 @@ if [ ! -f "$DB_PATH" ]; then
 else
   echo ""
   echo "ℹ️  Banco de dados já existe: $DB_PATH"
-  echo "   Para aplicar o schema em um DB novo: sqlite3 finance.db < engine/schema.sql"
 fi
+
+# 8. Registrar MCP server no Claude Code
+SETTINGS="$HOME/.claude/settings.json"
+
+if [ ! -f "$SETTINGS" ]; then
+  echo '{}' > "$SETTINGS"
+fi
+
+"$VENV_DIR/bin/python3" - <<PYEOF
+import json, pathlib, sys
+
+settings_path = pathlib.Path('$SETTINGS')
+cfg = json.loads(settings_path.read_text())
+cfg.setdefault('mcpServers', {})['severino'] = {
+    'command': '$VENV_DIR/bin/python3',
+    'args': ['$REPO_DIR/engine/mcp_server.py'],
+    'env': {
+        'SEVERINO_HOME': '$REPO_DIR',
+        'SEVERINO_DATA_DIR': '$SEVERINO_DATA_DIR',
+    }
+}
+settings_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+print('✓  MCP server registrado em $SETTINGS')
+PYEOF
 
 echo ""
 echo "✅  Instalação concluída!"
 echo ""
 echo "Próximos passos:"
-echo "  1. Abra uma conversa no Claude Code"
-echo "  2. Digite: /severino-pergunta"
+echo "  1. Reinicie o Claude Code para carregar o MCP server"
+echo "  2. Abra uma conversa e digite: /severino-pergunta"
 echo "  3. Siga o onboarding de 8 blocos"
 echo ""
 echo "Documentação: $REPO_DIR/README.md"

@@ -2,16 +2,16 @@
 
 > Seu zelador financeiro de bolso. Durão de fora, coração mole.
 
-Severino é uma suíte de **4 skills para Claude Code** que transforma o Claude em um gestor financeiro pessoal com contexto persistente. Em vez de planilha ou formulário, você fala — o Severino anota, fecha o mês com você e te dá o diagnóstico com número real e razão citável.
+Severino é uma suíte de **4 skills para Claude Code** com um **MCP server local** que transforma o Claude em um gestor financeiro pessoal com contexto persistente. Em vez de planilha ou formulário, você fala — o Severino anota, fecha o mês com você e te dá o diagnóstico com número real e razão citável.
 
 ---
 
 ## O que faz
 
 | Skill | Quando usar |
-|---|---|
+| --- | --- |
 | `/severino-pergunta` | Primeira vez: monta o dossiê completo (8 blocos) |
-| `/severino-anota` | Dia a dia: "paguei aluguel", "recebi salário", "gastei 80 no mercado" |
+| `/severino-anota` | Dia a dia: "paguei aluguel", "gastei 80 no mercado", "recebi 500" |
 | `/severino-pente-fino` | Fim do mês: checklist dos recorrentes, fecha o mês |
 | `/severino-conselheiro` | Diagnóstico + estratégia + acompanhamento com números reais |
 
@@ -22,10 +22,10 @@ O conselheiro **não opina durante o onboarding**. Coleta fatos primeiro, estrat
 ## Requisitos
 
 - [Claude Code](https://claude.ai/code) (CLI da Anthropic)
-- Python 3.10+
+- Python 3.10+ (recomendado: 3.13 via `brew install python@3.13`)
 - SQLite 3 (já vem no macOS/Linux)
 
-> **Compatibilidade:** As skills funcionam exclusivamente com o **Claude Code**. O núcleo (schema SQL + motor Python) é portável para qualquer agente ou app.
+> **Compatibilidade:** As skills funcionam com o **Claude Code** (CLI e extensão VSCode). O MCP server também funciona com o Claude.ai web e qualquer cliente MCP compatível.
 
 ---
 
@@ -43,8 +43,8 @@ cd severino-skills
 Adicione ao seu `~/.zshrc` ou `~/.bashrc`:
 
 ```bash
-export SEVERINO_HOME="$HOME/severino-skills"       # onde você clonou
-export SEVERINO_DATA_DIR="$HOME/Financeiro"         # onde ficam seus dados (fora do git)
+export SEVERINO_HOME="$HOME/severino-skills"   # onde você clonou
+export SEVERINO_DATA_DIR="$HOME/Financeiro"     # onde ficam seus dados (fora do git)
 ```
 
 Recarregue:
@@ -61,15 +61,21 @@ bash install.sh
 
 O instalador:
 
+- Verifica Python 3.10+
+- Cria um virtualenv em `venv/` e instala o pacote `mcp`
 - Cria symlinks das 4 skills em `~/.claude/skills/`
 - Cria o banco de dados SQLite com o schema completo em `$SEVERINO_DATA_DIR/`
-- Verifica que o Claude Code está instalado
+- Registra o MCP server em `~/.claude/settings.json`
 
-### 4. Iniciar o onboarding
+### 4. Reiniciar o Claude Code
+
+O MCP server só é carregado na inicialização. Feche e reabra o Claude Code após o instalador.
+
+### 5. Iniciar o onboarding
 
 Abra uma conversa no Claude Code e digite:
 
-```
+```text
 /severino-pergunta
 ```
 
@@ -77,22 +83,32 @@ Abra uma conversa no Claude Code e digite:
 
 ## Como funciona por dentro
 
-```
-Você fala  →  Skill (SKILL.md)  →  SQLite (finance.db)
-                                        ↓
-                               derive_estado.py
-                                        ↓
-                               estado.json  +  7 SVGs
-                                        ↓
-                            severino-conselheiro lê e fala
+```text
+Você fala  →  Skill (SKILL.md)  →  MCP Server (mcp_server.py)  →  SQLite (finance.db)
+                                            ↓
+                                   derive_estado.py
+                                            ↓
+                                   estado.json  +  7 SVGs
+                                            ↓
+                                severino-conselheiro lê e fala
 ```
 
-**Seus dados nunca saem do seu computador.** O banco SQLite fica em `$SEVERINO_DATA_DIR`, fora do repositório. Só o `estado.json` (um resumo derivado, sem dados brutos) é enviado ao Claude para análise.
+### MCP Server
+
+O servidor expõe 3 tools que o Claude chama diretamente, sem prompts de permissão de Bash:
+
+| Tool | O que faz |
+| --- | --- |
+| `anota_transacao` | Grava a transação no DB e devolve o saldo do dia |
+| `listar_categorias` | Lista categorias para o Claude resolver IDs corretamente |
+| `consulta_estado` | Roda `derive_estado.py` e devolve o `estado.json` do mês |
+
+O servidor roda via **stdio** (processo local, sem porta de rede). **Seus dados nunca saem do computador.**
 
 ### As 3 camadas do schema
 
 | Camada | O que guarda |
-|---|---|
+| --- | --- |
 | **Fatos** | perfil, categorias, contas, cartões, dívidas, investimentos, recorrentes, transações |
 | **Objetivo** | metas (reserva, compra, quitar dívida, investir) |
 | **Estratégia** | recomendação da IA gerada no fim — nunca na entrada |
@@ -102,7 +118,7 @@ Você fala  →  Skill (SKILL.md)  →  SQLite (finance.db)
 O conselheiro avalia 6 KPIs com thresholds de fontes reais:
 
 | Indicador | Fonte |
-|---|---|
+| --- | --- |
 | Comprometimento de renda | CFP Board |
 | Taxa de poupança | Warren & Tyagi (2005) |
 | Cobertura de reserva | CFPB (2023) |
@@ -114,9 +130,10 @@ O conselheiro avalia 6 KPIs com thresholds de fontes reais:
 
 ## Estrutura do repositório
 
-```
+```text
 severino-skills/
 ├── engine/
+│   ├── mcp_server.py       # MCP server (stdio) — 3 tools
 │   ├── schema.sql          # schema SQLite v2 + seed de categorias BR
 │   ├── derive_estado.py    # DB → estado.json (+ diagnóstico + recomendação)
 │   └── render_graphs.py    # estado.json → 7 SVGs
@@ -128,6 +145,8 @@ severino-skills/
 │   ├── severino-anota/
 │   ├── severino-pente-fino/
 │   └── severino-conselheiro/
+├── venv/                   # virtualenv local (não entra no git)
+├── requirements.txt        # mcp>=1.0.0
 ├── modelagem/              # documentação das decisões de design (não vai pro DB)
 ├── install.sh              # instalador
 └── README.md
@@ -138,9 +157,10 @@ severino-skills/
 ## Privacidade
 
 - Banco de dados: local, nunca sincronizado
+- MCP server: roda via stdio, sem porta de rede, sem telemetria
 - `*.db` e `data/` estão no `.gitignore`
 - O Claude recebe apenas o `estado.json` (derivado, sem dados brutos)
-- Sem conta, sem servidor, sem telemetria
+- Sem conta, sem servidor externo
 
 ---
 
