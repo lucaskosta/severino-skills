@@ -3,6 +3,7 @@
 *.db.bak-*
 data/
 instances/
+Financeiro-Lucas/
 
 # python
 __pycache__/
