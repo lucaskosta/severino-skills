@@ -1,0 +1,53 @@
+---
+description: Fechar o mês financeiro. Ativar quando o usuário quer fechar o mês, fazer pente fino, confirmar pagamentos pendentes ou encerrar o período.
+alwaysApply: false
+---
+
+# severino-pente-fino — Fechamento do mês
+
+**DB:** `sqlite3 "$SEVERINO_DATA_DIR/finance-mcp-server/data/finance.db"`
+
+## Fluxo (6 passos)
+
+### 1. Determinar o mês
+Usar o informado ou perguntar. Gerar estado atualizado:
+```bash
+python3 "$SEVERINO_HOME/engine/derive_estado.py" YYYY-MM --data-dir "$SEVERINO_DATA_DIR"
+```
+
+### 2. Ler pendentes
+```
+estado.json → calendar.items[paid=false]
+```
+
+### 3. Checklist item a item
+Para cada item pendente:
+> "[nome] — R$ [valor] (vence dia [due_day]) — pago? (s / n / valor diferente)"
+
+- `s` → gravar com valor original
+- `n` → pular
+- valor diferente → gravar com valor informado
+
+### 4. Gastos não rastreados
+> "Teve gasto de lazer, restaurante, vestuário ou outros que não registrou?"
+
+Se sim → INSERT com categoria `Pessoal & Lazer` ou `Outros`.
+
+### 5. Batch INSERT
+```sql
+INSERT INTO transactions (date, description, amount, type, category_id)
+VALUES (:data, :descricao, :valor, 'expense',
+        (SELECT id FROM categories WHERE name = :categoria));
+```
+
+### 6. Fechar e rodar
+```bash
+python3 "$SEVERINO_HOME/engine/derive_estado.py" YYYY-MM --data-dir "$SEVERINO_DATA_DIR"
+python3 "$SEVERINO_HOME/engine/render_graphs.py"  YYYY-MM --data-dir "$SEVERINO_DATA_DIR"
+```
+
+Mostrar: total pago · a pagar · score de saúde (`diagnosis.score` + `diagnosis.tier`).
+Concluir: "Mês fechado. Quer ver o diagnóstico? → conselheiro"
+
+## Regra
+Não comentar a situação financeira durante o checklist. Só confirmar pagamentos.

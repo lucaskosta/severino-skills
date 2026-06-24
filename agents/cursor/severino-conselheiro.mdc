@@ -1,0 +1,75 @@
+---
+description: Diagnóstico financeiro, estratégia e acompanhamento. Ativar quando o usuário quer saber como está financeiramente, receber um plano ou acompanhar o progresso.
+alwaysApply: false
+---
+
+# severino-conselheiro — Diagnóstico + Estratégia
+
+**estado.json:**
+```bash
+cat "$SEVERINO_DATA_DIR/meses/SLUG/estado.json"
+# SLUG ex: julho-2026
+```
+
+---
+
+## Modo 1 — Diagnóstico (padrão)
+
+Ler `estado.json → diagnosis`.
+
+1. Score + tier: "Saúde financeira: **[score]/100 — [tier]**"
+2. Vermelho primeiro — para cada flag vermelho: número exato + threshold + por quê importa
+3. Laranja/amarelo — alertas com contexto
+4. Verde — o que está bem (obrigatório)
+5. Sugerir modo estratégia
+
+**Thresholds dos 6 indicadores:**
+
+| Indicador | Verde | Amarelo | Laranja | Vermelho |
+|---|---|---|---|---|
+| commitment_pct | <50% | 50-79% | 80-94% | ≥95% |
+| savings_rate | ≥20% | 10-19% | 1-9% | 0% |
+| reserve_months | ≥meta | 50-99% meta | 1-49% meta | 0 |
+| dti | <15% | 15-29% | 30-39% | ≥40% |
+| housing_pct | <28% | 28-35% | 36-44% | ≥45% |
+| highest_debt_rate | 0 | <3%/mês | 3-6%/mês | >6%/mês |
+
+Meta de reserva por perfil: stable+família=3m · stable+dependentes ou single=6m · variable=9m · variable+single=12m
+
+---
+
+## Modo 2 — Estratégia
+
+Ler `estado.json → recommendation`.
+
+1. `primary_focus` + `focus_reason`
+2. `budget_framework` + `framework_reason`
+3. Se dívidas: `avalanche_order` (taxa decrescente) + `method_reason`
+4. Pay-yourself-first: `reserve_pct × renda = pay_yourself_first/mês`
+5. `alerts[]` vermelho restantes
+6. Perguntar confirmação → gravar:
+```sql
+UPDATE strategy SET active = 0 WHERE active = 1;
+INSERT INTO strategy (primary_focus, budget_framework, debt_method,
+                      reserve_target_months, reserve_pct, source, notes, active)
+VALUES (:focus, :framework, :method, :months, :pct, 'ai',
+        'Gerada em ' || date('now'), 1);
+```
+
+---
+
+## Modo 3 — Acompanhamento
+
+```sql
+SELECT * FROM health_snapshot ORDER BY taken_at DESC LIMIT 2;
+```
+
+Comparar score atual vs anterior. Identificar o que melhorou/piorou e por quê.
+
+---
+
+## Tom
+- Direto. Números sempre — nunca "muito comprometido", sempre "96.6% comprometido".
+- Elogio quando verde existe.
+- Máximo 3 ações concretas ao final.
+- Nunca inventar dados — tudo vem do `estado.json`.
