@@ -9,7 +9,41 @@ user-invocable: true
 
 **Quando invocar:** primeira vez; ou "quero atualizar meus dados / revisar [bloco]".
 
-Carregar antes de começar:
+---
+
+## Preflight — rodar ANTES de qualquer pergunta
+
+```bash
+# 1. Checar variável obrigatória
+if [ -z "$SEVERINO_DATA_DIR" ]; then
+  echo "ERRO: SEVERINO_DATA_DIR não definida."
+  echo "Execute: export SEVERINO_DATA_DIR=\"/caminho/para/seus/dados\""
+  echo "Depois adicione ao ~/.zshrc para não precisar repetir."
+  exit 1
+fi
+
+DB="$SEVERINO_DATA_DIR/finance-mcp-server/data/finance.db"
+
+# 2. Criar DB + seed se não existe
+mkdir -p "$(dirname "$DB")"
+if [ ! -f "$DB" ]; then
+  echo "Banco não encontrado — criando..."
+  sqlite3 "$DB" < "$SEVERINO_HOME/engine/schema.sql"
+fi
+
+# 3. Verificar seed de categorias (deve ter ≥ 53)
+COUNT=$(sqlite3 "$DB" "SELECT COUNT(*) FROM categories;")
+if [ "$COUNT" -lt 53 ]; then
+  echo "Seed incompleto ($COUNT categorias) — reaplicando schema..."
+  sqlite3 "$DB" < "$SEVERINO_HOME/engine/schema.sql"
+fi
+
+echo "✓ DB pronto ($COUNT categorias)"
+```
+
+Se qualquer etapa falhar: parar e mostrar o erro exato antes de prosseguir.
+
+Carregar após preflight:
 ```
 Read: $SEVERINO_HOME/skills/shared/sql-examples.md
 ```
