@@ -14,11 +14,12 @@ venv/
 # scripts de geração legacy (schema v1, não compatíveis com v2)
 engine/generate_*.py
 
-# documentos de trabalho locais (design / brainstorm)
+# documentos de trabalho locais (design / brainstorm — ficam só local)
 refatoracao das skills.md
 modelagem/
 
 # os / editor
 .DS_Store
+**/.DS_Store
 .vscode/
 *.swp
