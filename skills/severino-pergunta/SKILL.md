@@ -1,7 +1,7 @@
 ---
 name: severino-pergunta
-description: 'Onboarding financeiro completo em 8 blocos. Coleta dossiê sem julgamento. Grava no DB.'
-argument-hint: 'Opcional: bloco a revisar (ex: "cartões", "dívidas"). Sem argumento = onboarding completo.'
+description: 'Onboarding financeiro: entrevista em 8 blocos OU importa planilha/extrato (Excel/CSV via markitdown). Coleta dossiê sem julgamento. Grava no DB.'
+argument-hint: 'Opcional: bloco a revisar (ex: "cartões"), ou "importar" pra trazer planilha/extrato. Sem argumento = onboarding completo.'
 user-invocable: true
 ---
 
@@ -58,6 +58,83 @@ Read: $SEVERINO_HOME/skills/shared/sql-examples.md
 2. **Confirmar cada bloco** antes de gravar. Mostrar resumo, aguardar "ok".
 3. **Se o usuário não souber:** pular com NULL ou 0. Não travar o fluxo.
 4. **category_id sempre via SELECT** — nunca hardcode de ID.
+5. **Importação:** normalizar data/valor, **validar e confirmar antes de gravar**, pular linha ruim sem travar o lote.
+
+---
+
+## Início — entrevista ou importação?
+
+Logo após o preflight, perguntar (voz do Severino):
+
+> "Bora montar tua ficha. Você quer **começar do zero** — eu te pergunto bloco a bloco — ou **já tem os dados numa planilha/extrato** pra eu importar e a gente só confere?"
+
+- **Do zero** → seguir os Blocos 0 → 7 abaixo.
+- **Tenho planilha/extrato** → rodar o **Modo importação** e depois voltar aos blocos só pra preencher o que a planilha não traz.
+
+---
+
+## Modo importação (planilha / extrato)
+
+Trazer o **histórico de transações** de uma planilha sem digitação, e usar esse histórico pra pré-preencher o resto do dossiê.
+
+### 1. Pegar o arquivo
+Pedir o caminho do arquivo (`.xlsx`, `.xls`, `.ods`, `.csv`).
+
+### 2. Ler / converter
+- `.xlsx` · `.xls` · `.ods` → converter com **markitdown** (`convert_to_markdown`) → tabela markdown.
+- `.csv` → ler direto (`Read`). Se vier sujo / multi-aba, usar markitdown também.
+
+### 3. Mapear colunas → schema
+Inspecionar o cabeçalho + ~5 linhas. Inferir o mapa para `transactions`:
+
+| Coluna do arquivo (exemplos) | Campo do schema |
+|---|---|
+| Data / Dia / Date | `date` |
+| Descrição / Histórico / Estabelecimento | `description` |
+| Valor / R$ / Amount | `amount` |
+| Tipo / Entrada-Saída / Débito-Crédito / sinal | `type` (`income`/`expense`) |
+| Categoria / Classificação | `category_id` (via match) |
+
+Cada planilha é diferente — **inferir, não assumir**. Se ambíguo, perguntar.
+
+### 4. Normalizar (regras de parse)
+- **Data:** converter para ISO `YYYY-MM-DD` (planilha BR vem `dd/mm/aaaa`).
+- **Valor:** tirar `R$`, ponto de milhar e vírgula decimal → REAL. Ex.: `R$ 1.234,56` → `1234.56`.
+- **Tipo:** coluna de tipo, se houver; senão sinal do valor (negativo = `expense`); senão colunas separadas débito/crédito.
+- **Categoria:** casar o texto com `categories` (nome). Sem match → propor a mais próxima ou cair em **Outros**. **Nunca inventar `category_id` — sempre `SELECT`** (regra 4).
+
+### 5. Validar ANTES de gravar (obrigatório)
+Mostrar resumo e **aguardar "ok"**:
+- nº de linhas · período (data mín–máx)
+- total entradas · total saídas
+- o mapa de colunas inferido
+- linhas problemáticas (data inválida, valor não-numérico) — listar, não gravar
+
+Se o DB já tiver transações no período → avisar risco de **duplicata** e perguntar antes.
+
+### 6. Gravar em lote
+Uma transação SQLite só. Para cada linha boa:
+
+```sql
+INSERT INTO transactions (date, description, amount, type, category_id)
+VALUES (:date, :description, :amount, :type,
+        (SELECT id FROM categories WHERE name = :categoria));
+```
+
+Linha problemática → pular e reportar no fim. Não travar o lote.
+
+### 7. Derivar estado + gráficos
+```bash
+python3 "$SEVERINO_HOME/engine/derive_estado.py" YYYY-MM --data-dir "$SEVERINO_DATA_DIR"
+python3 "$SEVERINO_HOME/engine/render_graphs.py"  YYYY-MM --data-dir "$SEVERINO_DATA_DIR"
+```
+
+### 8. Preencher os buracos (segundo passe)
+Planilha = histórico de transações. Não traz perfil, recorrentes, dívidas, investimentos, metas nem tom. Voltar aos blocos **0, 1, 3, 4, 5, 6, 7** — agora **pré-preenchendo a partir do importado**:
+
+> "Ó, na tua planilha tem 'Aluguel' R$ 1.200 todo mês — cadastro como recorrente? E vi salário de R$ 3.000 dia 5 — confirma como tua renda fixa?"
+
+Detectar padrões repetidos no histórico e **propor** recorrentes/renda. O usuário confirma — não digita de novo.
 
 ---
 
