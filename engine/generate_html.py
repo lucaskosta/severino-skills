@@ -146,18 +146,37 @@ body{background:var(--bg);color:var(--t);font-family:-apple-system,BlinkMacSyste
 .alert .ai{font-size:16px;flex-shrink:0;margin-top:1px}
 .alert .at{color:var(--t2);line-height:1.4}
 /* calendar */
-.cal-totals{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:var(--s2);border-radius:10px;margin-bottom:12px}
-.cal-t-lbl{font-size:11px;color:var(--mu2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
-.cal-t-val{font-size:20px;font-weight:700}
+.cal-totals{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+@media(max-width:560px){.cal-totals{grid-template-columns:repeat(2,1fr)}}
+.cal-t-card{background:var(--s2);border-radius:10px;padding:10px 14px}
+.cal-t-lbl{font-size:10px;color:var(--mu2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.cal-t-val{font-size:17px;font-weight:700}
 .cal-list{display:flex;flex-direction:column}
 .cal-item{display:flex;align-items:center;gap:14px;padding:10px 4px;border-bottom:1px solid var(--b)}
 .cal-item:last-child{border-bottom:none}
+.cal-item.income{background:rgba(34,197,94,.04)}
 .cal-day{width:36px;height:36px;background:var(--s2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--t2);flex-shrink:0}
+.cal-item.income .cal-day{background:rgba(34,197,94,.15);color:var(--ve)}
+.cal-arrow{font-size:12px;font-weight:700;flex-shrink:0;width:18px;text-align:center}
 .cal-name{flex:1;font-size:14px}
 .cal-amt{font-weight:700;font-size:14px;white-space:nowrap;margin-right:4px}
+.cal-amt.income-amt{color:var(--ve)}
 .cal-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 .cal-dot.paid{background:var(--ve)}
 .cal-dot.unpaid{background:var(--b);border:2px solid var(--mu)}
+/* consolidated */
+.flow-table{background:var(--s);border:1px solid var(--b);border-radius:14px;overflow:hidden}
+.flow-row{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--b)}
+.flow-row:last-child{border-bottom:none}
+.flow-row.total{background:var(--s2)}
+.flow-label{font-size:14px;color:var(--t2)}
+.flow-val{font-size:15px;font-weight:700}
+.flow-row.total .flow-label{font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--mu2)}
+.flow-row.total .flow-val{font-size:18px}
+/* analysis paragraphs */
+.analysis-block{background:var(--s);border:1px solid var(--b);border-radius:14px;padding:20px 22px;margin-bottom:14px}
+.analysis-block .atitle{font-size:11px;font-weight:700;color:var(--mu2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+.analysis-block .abody{font-size:15px;line-height:1.75;color:var(--t2)}
 /* svgs */
 .svg-item{margin-bottom:20px}
 .svg-title{font-size:12px;font-weight:600;color:var(--mu2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
@@ -376,17 +395,26 @@ def s_calendar(calendar: dict) -> str:
     if not items:
         return ""
 
-    total_paid   = calendar.get("total_paid", 0)
-    total_unpaid = calendar.get("total_unpaid", 0)
+    total_paid     = calendar.get("total_paid", 0)
+    total_unpaid   = calendar.get("total_unpaid", 0)
+    total_in       = calendar.get("total_in", 0)
+    total_received = calendar.get("total_received", 0)
 
     rows = []
     for item in items:
-        paid_cls = "paid" if item["paid"] else "unpaid"
+        is_income = item.get("flow") == "in"
+        paid_cls  = "paid" if item["paid"] else "unpaid"
+        item_cls  = "cal-item income" if is_income else "cal-item"
+        arrow     = "↑" if is_income else "↓"
+        arrow_col = "color:var(--ve)" if is_income else "color:var(--mu)"
+        amt_cls   = "cal-amt income-amt" if is_income else "cal-amt"
+        prefix    = "+" if is_income else "−"
         rows.append(f"""
-<div class="cal-item">
+<div class="{item_cls}">
   <div class="cal-day">{item["due_day"]}</div>
+  <span class="cal-arrow" style="{arrow_col}">{arrow}</span>
   <div class="cal-name">{item["name"]}</div>
-  <div class="cal-amt">{brl(item["amount"])}</div>
+  <div class="{amt_cls}">{prefix}&nbsp;{brl(item["amount"])}</div>
   <div class="cal-dot {paid_cls}"></div>
 </div>""")
 
@@ -394,18 +422,112 @@ def s_calendar(calendar: dict) -> str:
 <div class="sec">
   <h2>Calendário do mês</h2>
   <div class="cal-totals">
-    <div>
-      <div class="cal-t-lbl">Pago</div>
-      <div class="cal-t-val" style="color:var(--ve)">{brl(total_paid)}</div>
+    <div class="cal-t-card">
+      <div class="cal-t-lbl">A receber</div>
+      <div class="cal-t-val" style="color:var(--ve)">{brl(total_in)}</div>
     </div>
-    <div style="text-align:right">
+    <div class="cal-t-card">
+      <div class="cal-t-lbl">Recebido</div>
+      <div class="cal-t-val" style="color:var(--ve)">{brl(total_received)}</div>
+    </div>
+    <div class="cal-t-card">
       <div class="cal-t-lbl">A pagar</div>
       <div class="cal-t-val" style="color:var(--vm)">{brl(total_unpaid)}</div>
+    </div>
+    <div class="cal-t-card">
+      <div class="cal-t-lbl">Pago</div>
+      <div class="cal-t-val" style="color:var(--mu2)">{brl(total_paid)}</div>
     </div>
   </div>
   <div class="card">
     <div class="cal-list">{"".join(rows)}</div>
   </div>
+</div>"""
+
+
+def s_consolidated(estado: dict) -> str:
+    c   = estado.get("consolidated", {})
+    inc = estado["income"]
+    if not c:
+        return ""
+
+    proj = c["projected_balance"]
+    proj_color = "#22c55e" if proj >= 0 else "#ef4444"
+    conf_bal = c["confirmed_balance"]
+    conf_color = "#22c55e" if conf_bal >= 0 else "#ef4444"
+
+    return f"""
+<div class="sec">
+  <h2>Posição consolidada</h2>
+  <div class="flow-table">
+    <div class="flow-row">
+      <span class="flow-label">↑ Renda esperada</span>
+      <span class="flow-val" style="color:var(--ve)">{brl(c["expected_in"])}</span>
+    </div>
+    <div class="flow-row" style="padding-left:32px">
+      <span class="flow-label" style="color:var(--mu)">· confirmada</span>
+      <span class="flow-val" style="color:var(--mu2)">{brl(c["confirmed_in"])}</span>
+    </div>
+    <div class="flow-row" style="padding-left:32px">
+      <span class="flow-label" style="color:var(--mu)">· pendente</span>
+      <span class="flow-val" style="color:var(--mu2)">{brl(c["pending_in"])}</span>
+    </div>
+    <div class="flow-row">
+      <span class="flow-label">↓ Total comprometido</span>
+      <span class="flow-val" style="color:var(--vm)">− {brl(c["committed_out"])}</span>
+    </div>
+    <div class="flow-row" style="padding-left:32px">
+      <span class="flow-label" style="color:var(--mu)">· pago</span>
+      <span class="flow-val" style="color:var(--mu2)">{brl(c["paid_out"])}</span>
+    </div>
+    <div class="flow-row" style="padding-left:32px">
+      <span class="flow-label" style="color:var(--mu)">· pendente</span>
+      <span class="flow-val" style="color:var(--mu2)">{brl(c["unpaid_out"])}</span>
+    </div>
+    <div class="flow-row total">
+      <span class="flow-label">Saldo projetado</span>
+      <span class="flow-val" style="color:{proj_color}">{brl(proj)}</span>
+    </div>
+    <div class="flow-row total">
+      <span class="flow-label">Saldo confirmado</span>
+      <span class="flow-val" style="color:{conf_color}">{brl(conf_bal)}</span>
+    </div>
+    <div class="flow-row">
+      <span class="flow-label" style="color:var(--mu)">Meta poupança (pay-yourself-first)</span>
+      <span class="flow-val" style="color:var(--pu)">{brl(c["savings_target"])}/mês</span>
+    </div>
+  </div>
+</div>"""
+
+
+def s_analysis(analysis: dict) -> str:
+    if not analysis:
+        return ""
+
+    diag_text   = analysis.get("diagnosis_text", "")
+    advice_text = analysis.get("advice_text", "")
+
+    if not diag_text and not advice_text:
+        return ""
+
+    blocks = []
+    if diag_text:
+        blocks.append(f"""
+<div class="analysis-block">
+  <div class="atitle">O que o Severino viu</div>
+  <div class="abody">{diag_text}</div>
+</div>""")
+    if advice_text:
+        blocks.append(f"""
+<div class="analysis-block">
+  <div class="atitle">O que fazer agora</div>
+  <div class="abody">{advice_text}</div>
+</div>""")
+
+    return f"""
+<div class="sec">
+  <h2>Análise</h2>
+  {"".join(blocks)}
 </div>"""
 
 
@@ -451,7 +573,8 @@ def s_charts(svg_dir: Path, slug: str) -> str:
 
 # ─── assembler ────────────────────────────────────────────────────────────────
 
-def build_html(estado: dict, svg_dir: Path, ym: str) -> str:
+def build_html(estado: dict, svg_dir: Path, ym: str,
+               analysis: dict | None = None) -> str:
     slug = month_slug(ym)
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -464,7 +587,9 @@ def build_html(estado: dict, svg_dir: Path, ym: str) -> str:
 <body>
 <div class="wrap">
   {s_header(estado, ym)}
+  {s_analysis(analysis or {})}
   {s_summary(estado)}
+  {s_consolidated(estado)}
   {s_health(estado["diagnosis"])}
   {s_recommendation(estado)}
   {s_reserves(estado)}
@@ -484,6 +609,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Gera RESUMO-YYYY-MM.html do mês.")
     parser.add_argument("year_month", help="YYYY-MM")
     parser.add_argument("--data-dir", required=True, type=Path)
+    parser.add_argument("--analysis-json", type=Path, default=None,
+                        help="JSON com {diagnosis_text, advice_text} a embutir no HTML")
     args = parser.parse_args()
 
     try:
@@ -492,7 +619,7 @@ def main() -> int:
         print("Formato inválido — use YYYY-MM", file=sys.stderr)
         return 1
 
-    slug       = month_slug(args.year_month)
+    slug        = month_slug(args.year_month)
     estado_path = args.data_dir / "meses" / slug / "estado.json"
 
     if not estado_path.exists():
@@ -503,8 +630,13 @@ def main() -> int:
     with open(estado_path, encoding="utf-8") as f:
         estado = json.load(f)
 
+    analysis = {}
+    if args.analysis_json and args.analysis_json.exists():
+        with open(args.analysis_json, encoding="utf-8") as f:
+            analysis = json.load(f)
+
     svg_dir  = args.data_dir / "graficos"
-    html     = build_html(estado, svg_dir, args.year_month)
+    html     = build_html(estado, svg_dir, args.year_month, analysis)
     out_path = args.data_dir / "meses" / slug / f"RESUMO-{args.year_month}.html"
     out_path.write_text(html, encoding="utf-8")
     print(f"✓ {out_path}")

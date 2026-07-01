@@ -348,15 +348,16 @@ def derive_calendar(cur, ym: str) -> dict:
     today = date.today().isoformat()
     items = []
 
-    # Recurring items com vencimento
-    for r in cur.execute(
+    # Recurring items com vencimento — pre-fetch evita reuso de cursor no inner execute
+    rec_rows = cur.execute(
         """SELECT ri.name, ri.amount, ri.due_day,
                   c.budget_group, c.id AS cat_id
            FROM recurring_items ri
            JOIN categories c ON ri.category_id = c.id
            WHERE ri.active=1 AND ri.due_day IS NOT NULL
            ORDER BY ri.due_day""",
-    ):
+    ).fetchall()
+    for r in rec_rows:
         due_date = f"{ym}-{int(r['due_day']):02d}"
         paid = flt(cur.execute(
             "SELECT COALESCE(SUM(amount),0) FROM transactions "
@@ -367,6 +368,7 @@ def derive_calendar(cur, ym: str) -> dict:
             "due_day":      r["due_day"],
             "name":         r["name"],
             "amount":       flt(r["amount"]),
+            "flow":         "out",
             "paid":         paid,
             "budget_group": r["budget_group"],
             "category_id":  r["cat_id"],
@@ -374,12 +376,14 @@ def derive_calendar(cur, ym: str) -> dict:
 
     # Dívidas
     for d in cur.execute(
-        "SELECT name, installment_amount, due_day FROM debts WHERE status='active' AND due_day IS NOT NULL ORDER BY due_day"
-    ):
+        "SELECT name, installment_amount, due_day FROM debts "
+        "WHERE status='active' AND due_day IS NOT NULL ORDER BY due_day"
+    ).fetchall():
         items.append({
             "due_day":      d["due_day"],
             "name":         d["name"],
             "amount":       flt(d["installment_amount"]),
+            "flow":         "out",
             "paid":         False,
             "budget_group": "needs",
             "category_id":  None,
@@ -387,26 +391,76 @@ def derive_calendar(cur, ym: str) -> dict:
 
     # Faturas de cartão
     for c in cur.execute(
-        "SELECT name, current_balance, due_day FROM cards WHERE status='active' AND current_balance > 0 AND due_day IS NOT NULL ORDER BY due_day"
-    ):
+        "SELECT name, current_balance, due_day FROM cards "
+        "WHERE status='active' AND current_balance > 0 AND due_day IS NOT NULL ORDER BY due_day"
+    ).fetchall():
         items.append({
             "due_day":      c["due_day"],
             "name":         f"{c['name']} — cartão",
             "amount":       flt(c["current_balance"]),
+            "flow":         "out",
             "paid":         False,
             "budget_group": "needs",
             "category_id":  None,
         })
 
-    items.sort(key=lambda x: x["due_day"])
-    total_paid   = round(sum(i["amount"] for i in items if i["paid"]), 2)
-    total_unpaid = round(sum(i["amount"] for i in items if not i["paid"]), 2)
+    # Entradas — income_sources com dia conhecido
+    try:
+        inc_rows = cur.execute(
+            "SELECT name, amount, type, frequency, status, expected_date, expected_day "
+            "FROM income_sources WHERE status IN ('active','pending')"
+        ).fetchall()
+    except Exception:
+        inc_rows = cur.execute(
+            "SELECT name, amount, type, frequency, status, expected_date, NULL AS expected_day "
+            "FROM income_sources WHERE status IN ('active','pending')"
+        ).fetchall()
+
+    for r in inc_rows:
+        day = None
+        if r["expected_day"]:
+            day = int(r["expected_day"])
+        elif r["expected_date"] and r["expected_date"].startswith(ym):
+            day = int(r["expected_date"][8:10])
+        elif r["type"] == "salary" and r["frequency"] == "monthly":
+            day = 5  # dia padrão de salário quando não informado
+
+        if day is None:
+            continue
+
+        received = r["status"] == "received"
+        if not received and r["type"] == "salary" and r["frequency"] == "monthly":
+            received = flt(cur.execute(
+                "SELECT COALESCE(SUM(amount),0) FROM transactions "
+                "WHERE type='income' AND date LIKE ? AND date<=?",
+                (f"{ym}%", today),
+            ).fetchone()[0]) > 0
+
+        items.append({
+            "due_day":      day,
+            "name":         r["name"],
+            "amount":       flt(r["amount"]),
+            "flow":         "in",
+            "paid":         received,
+            "budget_group": "income",
+            "category_id":  None,
+        })
+
+    items.sort(key=lambda x: (x["due_day"], x["flow"]))
+    out_items = [i for i in items if i["flow"] == "out"]
+    in_items  = [i for i in items if i["flow"] == "in"]
+    total_paid   = round(sum(i["amount"] for i in out_items if i["paid"]), 2)
+    total_unpaid = round(sum(i["amount"] for i in out_items if not i["paid"]), 2)
+    total_in     = round(sum(i["amount"] for i in in_items), 2)
+    total_received = round(sum(i["amount"] for i in in_items if i["paid"]), 2)
 
     return {
-        "items":         items,
-        "total_paid":    total_paid,
-        "total_unpaid":  total_unpaid,
-        "urgent_before": 10,
+        "items":          items,
+        "total_paid":     total_paid,
+        "total_unpaid":   total_unpaid,
+        "total_in":       total_in,
+        "total_received": total_received,
+        "urgent_before":  10,
     }
 
 
@@ -772,6 +826,18 @@ def derive(ym: str, data_dir: Path) -> dict:
     recommendation   = compute_recommendation(flags, income, debts, reserves, spending)
     charts           = derive_charts(income, spending, debts, cards, reserves, calendar, diagnosis)
 
+    consolidated = {
+        "expected_in":      income["total_expected"],
+        "confirmed_in":     income["confirmed"],
+        "pending_in":       income["pending"],
+        "committed_out":    spending["total_committed"],
+        "paid_out":         spending["paid"],
+        "unpaid_out":       round(spending["total_committed"] - spending["paid"], 2),
+        "projected_balance": round(income["total_expected"] - spending["total_committed"], 2),
+        "confirmed_balance": round(income["confirmed"] - spending["paid"], 2),
+        "savings_target":   recommendation.get("pay_yourself_first", 0),
+    }
+
     save_health_snapshot(cur, diagnosis, ym)
 
     profile_row = cur.execute("SELECT * FROM profile WHERE id=1").fetchone()
@@ -802,6 +868,7 @@ def derive(ym: str, data_dir: Path) -> dict:
         "reserves":       reserves,
         "investments":    investments,
         "calendar":       calendar,
+        "consolidated":   consolidated,
         "diagnosis":      diagnosis,
         "recommendation": recommendation,
         "charts":         charts,

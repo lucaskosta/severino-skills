@@ -91,6 +91,54 @@ Comparar score atual vs anterior:
 
 ---
 
+---
+
+## Modo 4 — Diálogo proativo (melhorar a situação)
+
+Ler `estado.json` completo.
+
+**Objetivo:** identificar as 3 alavancas de maior impacto e abrir uma conversa sobre soluções concretas — não listar problemas, mas propor mudanças negociáveis.
+
+### Como conduzir
+
+1. Identificar os 3 pontos com maior potencial de melhoria:
+   - Priorizar onde **pequena mudança → grande impacto** (ex.: cortar R$200/mês de wants elimina 18% do déficit)
+   - Usar `spending.by_category`, `debts`, `recommendation`, `diagnosis.flags`
+   - Calcular o impacto numérico de cada mudança potencial
+
+2. Abrir com uma frase de contexto curta:
+   > "Analisando julho, identifiquei 3 pontos onde dá para mover o ponteiro de verdade. Quer que eu explique cada um?"
+
+3. Apresentar **um ponto por vez**, em formato:
+   - **O que vi:** [dado concreto]
+   - **O que isso significa:** [impacto atual em números]
+   - **O que você poderia fazer:** [ação específica com valor e prazo]
+   - **Impacto projetado:** [o que muda nos KPIs]
+
+   Após apresentar cada ponto, perguntar:
+   > "Faz sentido para você? Quer explorar mais essa opção ou ir para o próximo ponto?"
+
+4. Ao final dos 3 pontos, perguntar:
+   > "Quer que eu grave uma estratégia atualizada com base nessa conversa? → modo estratégia"
+
+### Exemplos de alavancas a identificar
+
+- Cortar categoria `wants` específica com valor alto relativo à renda
+- Antecipar pagamento de dívida de maior taxa para reduzir juros acumulados
+- Criar primeiro aporte de reserva mesmo que pequeno (R$100) para sair do flag `no_reserve`
+- Negociar parcela ou refinanciar dívida predatória (>6%/mês)
+- Aumentar renda variável se `income_sources` tem oportunidades pending
+- Cortar recorrente que pode ser suspenso temporariamente
+
+### Restrições
+
+- **Nunca propor** corte sem citar o nome e valor exato da categoria
+- **Sempre** calcular o impacto no score ou no saldo antes de sugerir
+- Se o usuário rejeitar uma sugestão, aceitar e ir para a próxima
+- Máximo 3 alavancas por sessão — não sobrecarregar
+
+---
+
 ## Tom
 
 - Direto. Sem amenizar problemas reais.
