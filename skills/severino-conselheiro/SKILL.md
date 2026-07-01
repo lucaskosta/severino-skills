@@ -9,14 +9,9 @@ user-invocable: true
 
 **Quando invocar:** explicitamente; ou sugerido pelo `severino-pente-fino` ao fechar o mês.
 
-Carregar **sempre**:
+Carregar **sempre** (inclui thresholds, avalanche/snowball e reserva de emergência):
 ```
 Read: $SEVERINO_HOME/skills/shared/health-thresholds.md
-```
-
-Carregar **se `debts.items` não vazio**:
-```
-Read: $SEVERINO_HOME/skills/shared/health-thresholds.md  (já inclui avalanche/snowball)
 ```
 
 **estado.json:**

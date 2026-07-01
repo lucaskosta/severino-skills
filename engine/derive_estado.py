@@ -36,6 +36,16 @@ def flt(v) -> float:
     return float(v) if v is not None else 0.0
 
 
+def _payoff_month(remaining: int) -> str | None:
+    if remaining <= 0:
+        return None
+    today = date.today()
+    idx = (today.month - 1) + (remaining - 1)
+    y = today.year + idx // 12
+    m = idx % 12 + 1
+    return f"{y}-{m:02d}"
+
+
 # ─── income ───────────────────────────────────────────────────────────────────
 
 def derive_income(cur, ym: str) -> dict:
@@ -203,6 +213,7 @@ def derive_debts(cur, income_confirmed: float) -> dict:
     monthly_payment = 0.0
     for r in rows:
         monthly_payment += flt(r["installment_amount"])
+        remaining = r["installments_total"] - r["installments_paid"]
         items.append({
             "name":            r["name"],
             "creditor":        r["creditor"],
@@ -210,9 +221,10 @@ def derive_debts(cur, income_confirmed: float) -> dict:
             "installment":     flt(r["installment_amount"]),
             "paid_count":      r["installments_paid"],
             "total_count":     r["installments_total"],
-            "remaining_count": r["installments_total"] - r["installments_paid"],
+            "remaining_count": remaining,
             "outstanding":     flt(r["balance_remaining"]),
             "due_day":         r["due_day"],
+            "payoff_month":    _payoff_month(remaining),
         })
 
     total = round(sum(i["outstanding"] for i in items), 2)
@@ -552,7 +564,8 @@ def compute_recommendation(flags: list[str], income: dict, debts: dict,
         sorted_av = sorted(debts["items"], key=lambda d: d["rate_monthly"], reverse=True)
         avalanche_order = [
             {"name": d["name"], "rate": d["rate_monthly"],
-             "outstanding": d["outstanding"], "installment": d["installment"]}
+             "outstanding": d["outstanding"], "installment": d["installment"],
+             "payoff_month": d.get("payoff_month")}
             for d in sorted_av
         ]
         debt_method = "avalanche"

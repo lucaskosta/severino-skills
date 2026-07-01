@@ -291,9 +291,10 @@ def build_debt_timeline_svg(title: str, debt_timeline: dict, gen: str) -> str:
         y      = 120 + idx * 68
         color  = PALETTE[idx % len(PALETTE)]
         rate_y = f"{d['rate_monthly']*100:.2f}%/mês"
+        payoff_str = f" · quitação {d['payoff_month']}" if d.get("payoff_month") else ""
         bars.append(
             f'<text x="36" y="{y}" fill="#e2e8f0" font-size="14" font-family="Arial, sans-serif">{d["name"]}</text>'
-            f'<text x="36" y="{y+17}" fill="#64748b" font-size="12" font-family="Arial, sans-serif">{rate_y} · parcela {fmt_brl(d["installment"])} · restam {d["remaining_count"]}x</text>'
+            f'<text x="36" y="{y+17}" fill="#64748b" font-size="12" font-family="Arial, sans-serif">{rate_y} · parcela {fmt_brl(d["installment"])} · restam {d["remaining_count"]}x{payoff_str}</text>'
             f'<rect x="36" y="{y+22}" width="620" height="18" rx="9" fill="#1e293b"/>'
             f'<rect x="36" y="{y+22}" width="{sw(d["outstanding"], max_out, 620)}" height="18" rx="9" fill="{color}"/>'
             f'<text x="838" y="{y+35}" text-anchor="end" fill="#f8fafc" font-size="13" font-family="Arial, sans-serif">{fmt_brl(d["outstanding"])}</text>'
