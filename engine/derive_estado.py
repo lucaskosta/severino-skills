@@ -36,6 +36,16 @@ def flt(v) -> float:
     return float(v) if v is not None else 0.0
 
 
+def _income_base(income: dict) -> tuple[float, bool]:
+    """Retorna (base_cálculo, usando_esperado).
+    Usa total_expected quando confirmed=0 para evitar percentuais absurdos."""
+    confirmed = income["confirmed"]
+    if confirmed > 0:
+        return confirmed, False
+    expected = income["total_expected"]
+    return max(expected, 1.0), expected > 0
+
+
 def _payoff_month(remaining: int) -> str | None:
     if remaining <= 0:
         return None
@@ -465,7 +475,7 @@ def _points(tier: str, weight: int) -> int:
 
 def compute_health(income: dict, spending: dict, debts: dict,
                    reserves: dict) -> tuple[dict, list[str]]:
-    inc = income["confirmed"] or 1.0  # evitar divisão por zero
+    inc, using_expected = _income_base(income)
 
     housing_total = next(
         (c["total"] for c in spending["by_category"] if c["name"] == "Moradia"), 0.0
@@ -516,6 +526,7 @@ def compute_health(income: dict, spending: dict, debts: dict,
     elif vals["highest_debt_rate"] > 0.03:        flags.append("high_debt_rate")
     if vals["housing_pct"] > 0.35:                flags.append("housing_over")
     if vals["dti"] >= 0.30:                       flags.append("dti_high")
+    if using_expected:                             flags.append("income_base_expected")
 
     diagnosis = {
         "score":      score,
@@ -530,7 +541,7 @@ def compute_health(income: dict, spending: dict, debts: dict,
 
 def compute_recommendation(flags: list[str], income: dict, debts: dict,
                             reserves: dict, spending: dict) -> dict:
-    inc = income["confirmed"]
+    inc, _ = _income_base(income)
 
     # primary_focus (waterfall)
     if "predatory_debt_rate" in flags:
@@ -750,8 +761,9 @@ def derive(ym: str, data_dir: Path) -> dict:
     cur = con.cursor()
 
     income      = derive_income(cur, ym)
-    spending    = derive_spending(cur, ym, income["confirmed"])
-    debts       = derive_debts(cur, income["confirmed"])
+    inc_base, _ = _income_base(income)
+    spending    = derive_spending(cur, ym, inc_base)
+    debts       = derive_debts(cur, inc_base)
     cards       = derive_cards(cur)
     reserves    = derive_reserves(cur, spending)
     investments = derive_investments(cur)

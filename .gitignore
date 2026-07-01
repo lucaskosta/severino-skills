@@ -13,7 +13,9 @@ venv/
 .env
 
 # scripts de geração legacy (schema v1, não compatíveis com v2)
-engine/generate_*.py
+engine/generate_resumo.py
+engine/generate_perfil.py
+engine/generate_estrategia.py
 
 # documentos de trabalho locais (design / brainstorm — ficam só local)
 refatoracao das skills.md
@@ -24,3 +26,6 @@ modelagem/
 **/.DS_Store
 .vscode/
 *.swp
+
+# pasta de teste com dados reais do Lucas (NUNCA sobe ao repo)
+teste-lucas/
