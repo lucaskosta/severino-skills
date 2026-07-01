@@ -26,6 +26,13 @@ TIER_COLOR = {
     "vermelho": "#ef4444",
 }
 
+TIER_DESC = {
+    "verde":    "Saúde sólida — continue assim",
+    "amarelo":  "Atenção necessária — ajustes pontuais recomendados",
+    "laranja":  "Situação de risco — mudanças urgentes",
+    "vermelho": "Situação crítica — ação imediata necessária",
+}
+
 INDICATOR_LABEL = {
     "commitment_pct":    "Comprometimento de renda",
     "savings_rate":      "Taxa de poupança",
@@ -97,9 +104,27 @@ CSS = """
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--t);font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Roboto,sans-serif;font-size:15px;line-height:1.6}
 .wrap{max-width:900px;margin:0 auto;padding:20px 16px 48px}
-/* header */
-.hdr{margin-bottom:24px}.hdr-row{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px}.hdr h1{font-size:30px;font-weight:800;letter-spacing:-.5px}.hdr .sub{font-size:13px;color:var(--mu2)}
-.score-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:24px;font-weight:700;font-size:17px;border:2px solid;white-space:nowrap}
+/* health hero */
+.hero{border-radius:18px;border:2px solid;padding:28px 28px 22px;margin-bottom:28px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;opacity:.04;background:var(--hero-c,#fff);pointer-events:none}
+.hero-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px}
+.hero-title{font-size:13px;font-weight:700;color:var(--mu2);text-transform:uppercase;letter-spacing:1px}
+.hero-meta{font-size:12px;color:var(--mu)}
+.hero-main{display:flex;align-items:flex-end;gap:24px;margin-bottom:18px;flex-wrap:wrap}
+.hero-score{line-height:1;flex-shrink:0}
+.hero-num{font-size:72px;font-weight:900;letter-spacing:-4px}
+.hero-denom{font-size:24px;font-weight:500;color:var(--mu2);margin-left:2px}
+.hero-right{flex:1;min-width:180px}
+.hero-tier{font-size:28px;font-weight:800;letter-spacing:.5px;margin-bottom:10px;text-transform:uppercase}
+.hero-bar-bg{background:rgba(255,255,255,.08);border-radius:8px;height:10px;margin-bottom:8px}
+.hero-bar-fill{height:10px;border-radius:8px;transition:width .3s}
+.hero-desc{font-size:13px;color:var(--mu2);line-height:1.4}
+.hero-flags{display:flex;flex-wrap:wrap;gap:8px}
+.hflag{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.hflag.vermelho{background:rgba(239,68,68,.12);color:#fca5a5}
+.hflag.laranja{background:rgba(249,115,22,.12);color:#fdba74}
+.hflag.amarelo{background:rgba(245,158,11,.12);color:#fcd34d}
+.hflag.verde{background:rgba(34,197,94,.12);color:#86efac}
 /* cards */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px}
 .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
@@ -224,24 +249,52 @@ def load_svg(path: Path) -> str:
 # ─── sections ─────────────────────────────────────────────────────────────────
 
 def s_header(estado: dict, ym: str) -> str:
-    diag   = estado["diagnosis"]
-    score  = diag["score"]
-    tier   = diag["tier"]
-    color  = tc(tier)
-    income = estado["income"]
-    gen    = datetime.now().strftime("%d/%m/%Y %H:%M")
+    diag  = estado["diagnosis"]
+    score = diag["score"]
+    tier  = diag["tier"]
+    color = tc(tier)
+    flags = diag.get("flags", [])
+    gen   = datetime.now().strftime("%d/%m/%Y %H:%M")
+    desc  = TIER_DESC.get(tier, "")
 
-    using_expected = "income_base_expected" in diag.get("flags", [])
-    base_note = " (renda esperada)" if using_expected else ""
+    using_expected = "income_base_expected" in flags
+    meta_note = " · renda esperada" if using_expected else ""
+
+    # Top flags as pills (no máximo 5, vermelho/laranja/amarelo primeiro)
+    priority = {"vermelho": 0, "laranja": 1, "amarelo": 2, "verde": 3}
+    sorted_flags = sorted(flags, key=lambda f: priority.get(FLAG_TIER.get(f, "amarelo"), 9))
+    flag_pills = []
+    for flag in sorted_flags[:5]:
+        ftier = FLAG_TIER.get(flag, "amarelo")
+        flabel = FLAG_LABEL.get(flag, flag)
+        icon = FLAG_ICON.get(ftier, "ℹ️")
+        flag_pills.append(
+            f'<span class="hflag {ftier}">{icon} {flabel}</span>'
+        )
 
     return f"""
-<div class="hdr">
-  <div class="hdr-row">
+<div class="hero" style="border-color:{color};--hero-c:{color}">
+  <div class="hero-top">
     <div>
-      <h1>Severino</h1>
-      <div class="sub">{month_title(ym)}{base_note} · gerado em {gen}</div>
+      <div class="hero-title">Saúde Financeira</div>
+      <div class="hero-meta">{month_title(ym)}{meta_note}</div>
     </div>
-    <span class="score-badge" style="color:{color};border-color:{color}">{score}/100 — {tier.capitalize()}</span>
+    <div class="hero-meta">gerado {gen}</div>
+  </div>
+  <div class="hero-main">
+    <div class="hero-score">
+      <span class="hero-num" style="color:{color}">{score}</span><span class="hero-denom">/100</span>
+    </div>
+    <div class="hero-right">
+      <div class="hero-tier" style="color:{color}">{tier.capitalize()}</div>
+      <div class="hero-bar-bg">
+        <div class="hero-bar-fill" style="width:{score}%;background:{color}"></div>
+      </div>
+      <div class="hero-desc">{desc}</div>
+    </div>
+  </div>
+  <div class="hero-flags">
+    {"".join(flag_pills)}
   </div>
 </div>"""
 
